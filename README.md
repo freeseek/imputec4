@@ -15,7 +15,12 @@ Installation
 
 Install basic tools (Debian/Ubuntu specific):
 ```
-sudo apt install wget liblzma-dev libbz2-dev gzip unzip samtools openjdk-11-jre-headless
+sudo apt install wget gzip unzip samtools openjdk-11-jre-headless
+```
+
+Optionally, you can install these libraries to activate further HTSlib features:
+```
+sudo apt install libbz2-dev libssl-dev liblzma-dev libgsl0-dev
 ```
 
 Preparation steps
@@ -23,17 +28,22 @@ Preparation steps
 mkdir -p $HOME/bin $HOME/res && cd /tmp
 ```
 
-Download latest version of htslib and bcftools (if not downloaded already)
+Download latest version of <a href="https://github.com/samtools/htslib">HTSlib</a> and <a href="https://github.com/samtools/bcftools">BCFtools</a> (if not downloaded already)
 ```
 git clone --branch=develop git://github.com/samtools/htslib.git
 git clone --branch=develop git://github.com/samtools/bcftools.git
 ```
 
-Compile latest version of htslib (optionally disable bz2 and lzma) and bcftools
+Compile latest version of HTSlib (optionally disable bz2, gcs, and lzma) and BCFtools (make sure you are using gcc version 5 or newer)
 ```
-cd htslib && autoheader && (autoconf || autoconf) && ./configure --disable-bz2 --disable-lzma && make && cd ..
+cd htslib && autoheader && (autoconf || autoconf) && ./configure --disable-bz2 --disable-gcs --disable-lzma && make && cd ..
 cd bcftools && make && cd .
 /bin/cp bcftools/{bcftools,plugins/fixref.so} $HOME/bin/
+```
+
+Make sure the directory with the plugins is available to bcftools
+```
+export BCFTOOLS_PLUGINS=$HOME/bin
 ```
 
 Download Beagle binary
@@ -102,17 +112,17 @@ for build in 37 38; do
     if ($4=="C4") for (i=5; i<NF; i+=2) printf "\t"1+x[$i]"|"1+x[$(i+1)]; \
     else for (i=5; i<NF; i+=2) printf "\t"x[$i]"|"x[$(i+1)]; \
     printf "\n"}') | \
-    $HOME/bin/bcftools +$HOME/bin/fixref.so --no-version -Ov \
+    bcftools +fixref --no-version -Ov \
     -o $HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh$build.vcf -- \
     --fasta-ref ${fasta[$build]} --mode flip
 
-  $HOME/bin/bcftools norm --no-version --check-ref w --fasta-ref ${fasta[$build]} \
+  bcftools norm --no-version --check-ref w --fasta-ref ${fasta[$build]} \
     $HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh$build.vcf -o /dev/null 2>&1 | \
     grep REF_MISMATCH | cut -f2,3 | awk -F"\t" -v OFS="\t" 'NR==FNR {x[$2]++} \
     NR>FNR && $2 in x {alt=$4; ref=$5; $4=ref; $5=alt; \
     for (i=10; i<=NF; i++) $i=1-substr($i,1,1)"|"1-substr($i,3,1)} NR>FNR' \
     - $HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh$build.vcf | \
-    $HOME/bin/bcftools view --no-version -Oz \
+    bcftools view --no-version -Oz \
     -o $HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh$build.vcf.gz
 done
 ```
@@ -128,7 +138,7 @@ build=38 # build=37
 declare -A chr=( ["37"]="6" ["38"]="chr6" )
 declare -A reg=( ["37"]="6:24894177-33890574" ["38"]="chr6:24893949-33922797" )
 
-$HOME/bin/bcftools view --no-version "$vcf" -r ${reg[$build]} | \
+bcftools view --no-version "$vcf" -r ${reg[$build]} | \
   java -Xmx8g -jar $HOME/res/beagle.r1399.jar gt=/dev/stdin \
   ref=$HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh$build.vcf.gz out="$out" \
   map=<(awk -v chr=${chr[$build]} 'NR>1 {print chr"\t.\t"$2/1e7"\t"$2}' \
@@ -142,8 +152,8 @@ out="..."
 build=38 # build=37
 declare -A reg=( ["37"]="6:31948000-31948000" ["38"]="chr6:31980223-31980223" )
 
-$HOME/bin/bcftools index "$out.vcf.gz" && \
-$HOME/bin/bcftools query -f "[%SAMPLE\t%ALT\t%GT\n]" "$out.vcf.gz" -r ${reg[$build]} | tr -d '[<>]' | \
+bcftools index "$out.vcf.gz" && \
+bcftools query -f "[%SAMPLE\t%ALT\t%GT\n]" "$out.vcf.gz" -r ${reg[$build]} | tr -d '[<>]' | \
   awk -F"\t" -v OFS="\t" '{split($2,a,","); a["0"]="NA"; split($3,b,"|"); \
   print $1,a[b[1]],a[b[2]]}') > "$out.tsv"
 ```
@@ -156,15 +166,15 @@ Convert the C4 and 1000 Genomes project reference panels to plink and then merge
 ```
 url="ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase1/analysis_results/integrated_call_sets/ALL.chr6.integrated_phase1_v3.20101123.snps_indels_svs.genotypes.vcf.gz"
 
-$HOME/bin/bcftools annotate --no-version -x ID -I +'%CHROM:%POS:%REF:%ALT' \
+bcftools annotate --no-version -x ID -I +'%CHROM:%POS:%REF:%ALT' \
   $HOME/res/MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh37.vcf.gz | \
   $HOME/bin/plink --vcf /dev/stdin --biallelic-only --keep-allele-order --const-fid --make-bed \
   --out MHC_haplotypes_CEU_HapMap3_ref_panel.GRCh37
 
-$HOME/bin/bcftools view --no-version $url -r 6:24894177-33890574 | \
+bcftools view --no-version $url -r 6:24894177-33890574 | \
   awk 'NF==2 {print "##contig=<ID=6,length=171115067>"} {print}' | \
-  $HOME/bin/bcftools view --no-version -v snps | \
-  $HOME/bin/bcftools annotate --no-version -x ID -I +'%CHROM:%POS:%REF:%ALT' | \
+  bcftools view --no-version -v snps | \
+  bcftools annotate --no-version -x ID -I +'%CHROM:%POS:%REF:%ALT' | \
   $HOME/bin/plink --vcf /dev/stdin --keep-allele-order --const-fid --make-bed \
   --out ALL.chr6.integrated_phase1_v3.20101123.snps_indels_svs.genotypes
 
