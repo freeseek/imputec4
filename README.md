@@ -156,7 +156,7 @@ declare -A reg=( ["37"]="6:31948000-31948000" ["38"]="chr6:31980223-31980223" )
 bcftools index "$out.vcf.gz" && \
 bcftools query -f "[%SAMPLE\t%ALT\t%GT\n]" "$out.vcf.gz" -r ${reg[$build]} | tr -d '[<>]' | \
   awk -F"\t" -v OFS="\t" '{split($2,a,","); a["0"]="NA"; split($3,b,"|"); \
-  print $1,a[b[1]],a[b[2]]}') > "$out.tsv"
+  print $1,a[b[1]],a[b[2]]}' > "$out.tsv"
 ```
 Notice that due to the location of the C4 gene in the MHC locus, the imputed C4 alleles are particularly susceptible to potential confounding due to: (i) linkage disequilibrium mediated correlation with genotypes at other MHC variants, including HLA variants; (ii) population stratification as MHC haplotypes are prone to high allele frequency differences across ethnic groups due to strong natural selection at the MHC locus.
 
